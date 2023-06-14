@@ -2,15 +2,20 @@ import os
 from dotenv import load_dotenv
 import requests
 from slack_bolt import App
+import slack_sdk
 import json
 import re
 from pprint import pprint
-from block_kit_templates import build_schedule_block_kit, build_error_block_kit, build_deck_invalid_block_kit
+from block_kit_templates import ValidationResponse
+
+# slack_sdk.web.slack_response.SlackResponse.get()
 
 load_dotenv()
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 SLACK_BOT_USER_TOKEN = os.getenv('SLACK_BOT_USER_TOKEN')
 SLACK_SIGNING_SECRET = os.getenv('SLACK_SIGNING_SECRET')
+
+encoder = json.JSONEncoder()
 
 # Initializes your app with your bot token and signing secret
 app = App(
@@ -50,17 +55,56 @@ def validate_deck_list(deck_text):
     :param str deck_text:
     :return: bool
     """
-    with open("bannedCards.json", "r") as ban_list_file:
+    with open("bannedCards.json", "r") as ban_list_file, open("card_exceptions.json", "r") as card_exceptions_file:
         banned_cards = json.load(ban_list_file)
-    errors = []
+        card_exceptions = json.load(card_exceptions_file)
+    errors, warnings = [], []
+    card_count_mainboard = 0
+    card_count_sideboard = 0
+    in_sideboard = False
     for row in deck_text.splitlines():
-        row = re.sub("(^[0-9])(\s+)", "", row).strip()
-        if not row or "sideboard" in row.lower():
+        card_name = re.sub("(^[0-9])(\s+)", "", row).strip()
+        # Flag when at the sideboard
+        in_sideboard = in_sideboard or "sideboard" in row.lower()
+        # Skip row if no card
+        if not card_name or "sideboard" in row.lower():
             continue
-        if row in banned_cards:
-            errors.append(f"{row} was banned {banned_cards[row]}")
+        # Retrieve card count
+        card_count = int(list(filter(str.isdigit, row))[0])
+        # Check number of card
+        # Cards that are not exempt from the play set rule
+        not_exempt = card_name not in card_exceptions["playset"] and card_count > 4
+        # Cards that have a larger play set
+        limited_exempt = card_name in card_exceptions["playset"] and 0 < card_exceptions["playset"][card_name] < card_count
+        if not_exempt or limited_exempt:
+            errors.append(("count", f"Too many ({card_count}) copies of {card_name}"))
 
-    return errors
+        # Add number of card to totals
+        if in_sideboard:
+            card_count_sideboard += card_count
+        else:
+            card_count_mainboard += card_count
+
+        # Check if card is banned
+        if card_name in banned_cards:
+            errors.append(("ban", f"{card_name} was banned {banned_cards[card_name]}"))
+
+    if card_count_sideboard != 15:
+        message = f"Too %s ({card_count_sideboard}) cards in sideboard"
+        if card_count_sideboard > 15:
+            errors.append(("count", message % "many"))
+        else:
+            warnings.append(message % "few")
+
+    if card_count_mainboard != 60:
+        message = f"Too %s ({card_count_mainboard}) cards in mainboard"
+        if card_count_mainboard < 60:
+            errors.append(("count", message % "few"))
+        else:
+            warnings.append(message % "many")
+
+    errors.sort()
+    return [error for error_type, error in errors], warnings
 
 
 def deck_response(channel_id, message_text, slack_file_dict):
@@ -70,18 +114,17 @@ def deck_response(channel_id, message_text, slack_file_dict):
     else:
         file_status, file_text = handle_file_attachment(slack_file_dict)
 
+    response_block = ValidationResponse()
+    response = app.client.chat_postMessage(channel=channel_id, text="Checking...")
+
     if file_status is None:
-        app.client.chat_postMessage(channel=channel_id, **build_error_block_kit())
+        response_block.set_file_rejected()
+        app.client.chat_postMessage(channel=channel_id, **response_block.get_block_kit())
         return
 
-    if file_status:
-        deck_errors = validate_deck_list(file_text)
-        if deck_errors:
-            app.client.chat_postMessage(channel=channel_id, **build_deck_invalid_block_kit(deck_errors))
-            return
-        else:
-            app.client.chat_postMessage(channel=channel_id, **build_schedule_block_kit(message_text))
-            return
+    deck_errors, deck_warnings = validate_deck_list(file_text)
+    response_block.set_deck_errors(deck_errors, deck_warnings)
+    app.client.chat_update(channel=channel_id, ts=response.get("ts"), **response_block.get_block_kit())
 
 
 @app.event("file_created")
