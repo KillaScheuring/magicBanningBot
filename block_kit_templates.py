@@ -1,17 +1,94 @@
 from pprint import pprint
 
-schedule_block_kit = {
-    "text": "Your deck is legal!",
-    "blocks": [
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "Your deck is legal!"
+
+class ValidationResponse:
+    def __init__(self):
+        self.header = "Checking..."
+        self.blocks = []
+
+    def get_block_kit(self):
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": self.header,
+                    "emoji": True
+                }
+            },
+            {
+                "type": "divider"
             }
+        ]
+        blocks.extend(self.blocks)
+        return {
+            "text": self.header,
+            "blocks": blocks
         }
-    ]
-}
+
+    def set_file_rejected(self):
+        self.header = "File type is incorrect"
+        self.blocks = []
+
+    def set_deck_errors(self, errors, warnings):
+        self.header = "Deck validation results:"
+        self.blocks = []
+
+        if errors:
+            self.blocks.extend([{
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":x: Deck has errors!",
+                    "emoji": True
+                }
+            }])
+        else:
+            self.blocks.extend([{
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":white_check_mark: Deck is valid!",
+                    "emoji": True
+                }
+            }])
+
+        # Add error and warning titles
+        if errors or warnings:
+            titles = []
+            if errors:
+                titles.append({
+                    "type": "mrkdwn",
+                    "text": "*Errors*"
+                })
+
+            if warnings:
+                titles.append({
+                    "type": "mrkdwn",
+                    "text": "*Warnings*"
+                })
+            self.blocks.extend([{
+                "type": "section",
+                "fields": titles
+            }])
+
+            # Adjust error and warning lengths to match for fields
+            if len(errors) < len(warnings):
+                errors += [None] * (len(warnings) - len(errors))
+            if len(warnings) < len(errors):
+                warnings += [None] * (len(errors) - len(warnings))
+
+            # Add error and warning messages
+            self.blocks.extend([{
+                "type": "section",
+                "fields": [{
+                    "type": "plain_text",
+                    "text": item,
+                    "emoji": True
+                } for item in items if item]
+            } for items in zip(errors, warnings)])
+
+
 # schedule_block_kit = {
 #     "text": "Your deck is legal!",
 #     "blocks": [
@@ -63,52 +140,3 @@ schedule_block_kit = {
 #         }
 #     ]
 # }
-
-
-def build_schedule_block_kit(message_text):
-    schedule_prompt = schedule_block_kit.copy()
-    # schedule_prompt["blocks"][1]["element"]["initial_value"] = message_text
-    return schedule_prompt
-
-
-error_block_kit = {
-    "text": "Please submit a valid text file!",
-    "blocks": [
-        {
-            "type": "section",
-            "text": {
-                "type": "plain_text",
-                "text": "Please submit a valid text file!",
-                "emoji": True
-            }
-        }
-    ]
-}
-
-
-def build_error_block_kit():
-    error_prompt = error_block_kit.copy()
-    return error_prompt
-
-
-deck_invalid_block_kit = {
-    "text": "Deck invalid",
-    "blocks": [
-        {
-            "type": "section",
-            "text": {
-                "type": "plain_text",
-                "text": "Deck invalid",
-                "emoji": True
-            }
-        }
-    ]
-}
-
-
-def build_deck_invalid_block_kit(deck_errors):
-    deck_invalid_prompt = error_block_kit.copy()
-    deck_invalid_prompt["text"] = "\n".join(deck_errors)
-    deck_invalid_prompt["blocks"][0]["text"]["text"] = "\n".join(deck_errors)
-
-    return deck_invalid_prompt
