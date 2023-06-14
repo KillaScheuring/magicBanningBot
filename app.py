@@ -140,7 +140,7 @@ def update_home_tab(client, event, logger):
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "*Welcome to your _App's Home_* :tada:"
+                            "text": "*Welcome to Magic Banning Bot* :tada:"
                         }
                     },
                     {
@@ -150,20 +150,10 @@ def update_home_tab(client, event, logger):
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "This button won't do much for now but you can set up a listener for it using the `actions()` method and passing its unique `action_id`. See an example in the `examples` folder within your Bolt app."
+                            "text": "To check a deck, go to the messages tab above and either upload a txt or "
+                                    "paste a deck inside a codeblock. I will check the deck and let you know "
+                                    "if it has any banned cards!"
                         }
-                    },
-                    {
-                        "type": "actions",
-                        "elements": [
-                            {
-                                "type": "button",
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": "Click me!"
-                                }
-                            }
-                        ]
                     }
                 ]
             }
