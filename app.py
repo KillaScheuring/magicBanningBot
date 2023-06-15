@@ -5,6 +5,9 @@ from slack_bolt import App
 import slack_sdk
 import json
 import re
+import docx2txt
+from io import BytesIO
+
 from pprint import pprint
 from block_kit_templates import ValidationResponse
 
@@ -14,6 +17,7 @@ load_dotenv()
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 SLACK_BOT_USER_TOKEN = os.getenv('SLACK_BOT_USER_TOKEN')
 SLACK_SIGNING_SECRET = os.getenv('SLACK_SIGNING_SECRET')
+BANNED_CARDS_CHANNEL = os.getenv('BANNED_CARDS_CHANNEL')
 
 encoder = json.JSONEncoder()
 
@@ -43,10 +47,31 @@ def handle_file_attachment(slack_file_dict):
 
     file_type = file_url.split(".")[-1]
     if file_type == "txt":
-        return True, file_request.text
+        return "txt", file_request.text
     if file_type == "docx":
-        return None, None
+        print("Docx!")
+        return "docx", file_request.content
     return None, None
+
+
+def process_ban_list(ban_list_content):
+    docx = BytesIO(ban_list_content)
+
+    # Extract text
+    text = docx2txt.process(docx)
+
+    ban_list = {}
+    week = "Week 0"
+    for row in text.splitlines():
+        row = row.replace(":", "").replace("’", "'").strip()
+        if not row or "banned cards" in row.lower():
+            continue
+        if "Week" in row:
+            week = row
+            continue
+        ban_list.setdefault(row, week)
+    with open("bannedCards.json", "w") as ban_list_json_file:
+        json.dump(ban_list, ban_list_json_file)
 
 
 def validate_deck_list(deck_text):
@@ -127,22 +152,21 @@ def deck_response(channel_id, message_text, slack_file_dict):
     app.client.chat_update(channel=channel_id, ts=response.get("ts"), **response_block.get_block_kit())
 
 
-@app.event("file_created")
+@app.event("file_shared")
 def read_file_created(client, event, logger):
-    # Todo make this check for new ban list
-    print("File created!")
-    print("event")
-    print(event)
-    files = app.client.files_list()
-    print("files")
-    pprint(files.get("files"))
-    file_info = app.client.files_info(file=event["file_id"])
-    print("file info")
-    pprint(file_info)
+    if event.get("channel_id") != BANNED_CARDS_CHANNEL:
+        return
+    print("file_shared")
+    file_info = client.files_info(file=event["file_id"])
+    file_status, file_content = handle_file_attachment(file_info.get("file"))
+    if type(file_content) == str:
+        return
+    process_ban_list(file_content)
 
 
 @app.message()
 def read_dm(message):
+    print("read_dm")
     message_files_list = message.get("files", [])
     if not message_files_list and "sideboard" not in message.get("text").lower():
         return
@@ -158,6 +182,7 @@ def handle_message_events(body, logger, event):
     :param dict event:
     :return:
     """
+    print("handle_message_events")
     message_files_list = body.get("event", {}).get("files", [])
     if not message_files_list:
         return
