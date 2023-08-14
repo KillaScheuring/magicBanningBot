@@ -95,7 +95,7 @@ def validate_deck_list(deck_text):
         if not card_name or "sideboard" in row.lower():
             continue
         # Retrieve card count
-        card_count = int(list(filter(str.isdigit, row))[0])
+        card_count = int("".join(list(filter(str.isdigit, row))))
         # Check number of card
         # Cards that are not exempt from the play set rule
         not_exempt = card_name not in card_exceptions["playset"] and card_count > 4
