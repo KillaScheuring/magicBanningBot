@@ -88,7 +88,7 @@ def validate_deck_list(deck_text):
     card_count_sideboard = 0
     in_sideboard = False
     for row in deck_text.splitlines():
-        card_name = re.sub("(^[0-9])(\s+)", "", row).strip()
+        card_name = re.sub("(^[0-9]+)(\s+)", "", row).strip()
         # Flag when at the sideboard
         in_sideboard = in_sideboard or "sideboard" in row.lower()
         # Skip row if no card
